@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Math Agar.io - Fracciones Equivalentes (Modo Dark)</title>
+  
+  <!-- KaTeX para representar la fracción objetivo -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+  
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      overflow: hidden;
+      background: #121212;
+      font-family: Arial, sans-serif;
+      cursor: none;
+    }
+    #gameCanvas { position: absolute; top: 0; left: 0; }
+    #operation-display {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(0,0,0,0.7);
+      padding: 10px;
+      border-radius: 10px;
+      z-index: 10;
+      font-size: 1.6em;
+      color: #fff;
+    }
+    #score-display {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(0,0,0,0.7);
+      padding: 10px;
+      border-radius: 10px;
+      z-index: 10;
+      font-size: 1.2em;
+      color: #fff;
+    }
+    /* Pantalla de Game Over (oculta por defecto) */
+    #game-over {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.9);
+      color: #fff;
+      padding: 30px;
+      border-radius: 15px;
+      text-align: center;
+      z-index: 999;
+      font-size: 2em;
+      display: none;
+    }
+    /* Pantalla de bienvenida (visible al inicio) */
+    #welcome-screen {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.9);
+      color: #fff;
+      padding: 30px;
+      border-radius: 15px;
+      text-align: center;
+      z-index: 999;
+      font-size: 2em;
+      display: block;
+    }
+    #welcome-screen button, #game-over button {
+      margin-top: 20px;
+      font-size: 0.8em;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      background: #2979ff;
+      color: #fff;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  
+  <div id="welcome-screen">
+    <div>Bienvenido a Math Agar.io</div>
+    <button id="start-btn">Iniciar juego</button>
+  </div>
+  
+  <div id="operation-display"></div>
+  <div id="score-display">Puntuación: 0</div>
+  
+  <div id="game-over">
+    <div>¡Game Over!</div>
+    <div id="final-score"></div>
+    <button id="restart-btn">Nueva partida</button>
+  </div>
+  
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    
+    const WORLD_WIDTH = 4000;
+    const WORLD_HEIGHT = 4000;
+    const GRID_SIZE = 100;
+    
+    const FOOD_COUNT = 40;
+    const STAR_COUNT = 200;
+    
+    let playerCells = [];
+    let foods = [];
+    let stars = [];
+    let currentOperation = null;
+    let score = 0;
+    let mouseX = 0, mouseY = 0;
+    let gameOver = false;
+    const baseAccel = 0.5;
+    let lastOpTime = Date.now();
+    const MIN_RADIUS = 10;
+    
+    function getRandomInt(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+    function gcd(a, b) {
+      a = Math.abs(a);
+      b = Math.abs(b);
+      while (b !== 0) {
+        [a, b] = [b, a % b];
+      }
+      return a;
+    }
+    function generateRandomIrreducibleFraction() {
+      let num, denom, g;
+      do {
+        denom = getRandomInt(2, 10);
+        num = getRandomInt(1, denom - 1);
+        g = gcd(num, denom);
+      } while (g !== 1);
+      return { num, denom };
+    }
+    
+    function initPlayer() {
+      playerCells = [{
+        x: WORLD_WIDTH / 2,
+        y: WORLD_HEIGHT / 2,
+        radius: 40,
+        vx: 0,
+        vy: 0,
+        mergeCooldown: 0,
+        isEjected: false
+      }];
+    }
+    
+    function generateOperation() {
+      const frac = generateRandomIrreducibleFraction();
+      currentOperation = { num: frac.num, denom: frac.denom };
+      const displayText = `\\displaystyle \\frac{${frac.num}}{${frac.denom}} = \\;?`;
+      katex.render(displayText, document.getElementById('operation-display'));
+      lastOpTime = Date.now();
+    }
+    
+    function spawnFoods() {
+      foods = [];
+      const targetNum = currentOperation.num;
+      const targetDen = currentOperation.denom;
+      
+      // 30% de 40 = 12 fracciones correctas
+      const numCorrect = Math.floor(FOOD_COUNT * 0.3); // 12
+      let correctFractions = [];
+      let attempts = 0;
+      while (correctFractions.length < numCorrect && attempts < 200) {
+        const k = getRandomInt(2, 6);
+        const a = targetNum * k;
+        const b = targetDen * k;
+        if (!correctFractions.some(f => f.num === a && f.denom === b)) {
+          correctFractions.push({ num: a, denom: b });
+        }
+        attempts++;
+      }
+      while (correctFractions.length < numCorrect) {
+        const k = getRandomInt(2, 6);
+        correctFractions.push({ num: targetNum * k, denom: targetDen * k });
+      }
+      for (let i = 0; i < correctFractions.length; i++) {
+        const frac = correctFractions[i];
+        foods.push({
+          x: Math.random() * WORLD_WIDTH,
+          y: Math.random() * WORLD_HEIGHT,
+          radius: 30,
+          num: frac.num,
+          denom: frac.denom,
+          vx: (Math.random() - 0.5) * 2,
+          vy: (Math.random() - 0.5) * 2,
+          color: '#ffab40',
+          isCorrect: true
+        });
+      }
+      
+      const incorrectCount = FOOD_COUNT - numCorrect; // 28
+      for (let i = 0; i < incorrectCount; i++) {
+        let a, b;
+        let valid = false;
+        let tries = 0;
+        while (!valid && tries < 200) {
+          b = getRandomInt(2, 12);
+          a = getRandomInt(1, b - 1);
+          if (a * targetDen !== b * targetNum) {
+            valid = true;
+          }
+          tries++;
+        }
+        if (!valid) {
+          b = targetDen + getRandomInt(1, 5);
+          a = targetNum + getRandomInt(1, 5);
+        }
+        foods.push({
+          x: Math.random() * WORLD_WIDTH,
+          y: Math.random() * WORLD_HEIGHT,
+          radius: 30,
+          num: a,
+          denom: b,
+          vx: (Math.random() - 0.5) * 2,
+          vy: (Math.random() - 0.5) * 2,
+          color: '#ffab40',
+          isCorrect: false
+        });
+      }
+    }
+    
+    function spawnStars() {
+      stars = [];
+      for (let i = 0; i < STAR_COUNT; i++) {
+        stars.push({
+          x: Math.random() * WORLD_WIDTH,
+          y: Math.random() * WORLD_HEIGHT,
+          radius: Math.random() < 0.5 ? 1 : 2
+        });
+      }
+    }
+    
+    function updatePlayer() {
+      if (gameOver) return;
+      
+      let controlX = mouseX - canvas.width / 2;
+      let controlY = mouseY - canvas.height / 2;
+      let controlDist = Math.sqrt(controlX * controlX + controlY * controlY);
+      for (let cell of playerCells) {
+        if (controlDist > 0) {
+          cell.vx += (controlX / controlDist) * baseAccel;
+          cell.vy += (controlY / controlDist) * baseAccel;
+        }
+        cell.vx *= 0.92;
+        cell.vy *= 0.92;
+        let dynamicMaxSpeed = 25 * (40 / cell.radius);
+        if (dynamicMaxSpeed < 8) dynamicMaxSpeed = 8;
+        let speed = Math.sqrt(cell.vx * cell.vx + cell.vy * cell.vy);
+        if (speed > dynamicMaxSpeed) {
+          cell.vx = (cell.vx / speed) * dynamicMaxSpeed;
+          cell.vy = (cell.vy / speed) * dynamicMaxSpeed;
+        }
+        cell.x += cell.vx;
+        cell.y += cell.vy;
+        if (cell.x < cell.radius) cell.x = cell.radius;
+        if (cell.x > WORLD_WIDTH - cell.radius) cell.x = WORLD_WIDTH - cell.radius;
+        if (cell.y < cell.radius) cell.y = cell.radius;
+        if (cell.y > WORLD_HEIGHT - cell.radius) cell.y = WORLD_HEIGHT - cell.radius;
+        checkCollisionsWithFoods(cell);
+      }
+    }
+    
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      let offsetX = canvas.width / 2 - playerCells[0].x;
+      let offsetY = canvas.height / 2 - playerCells[0].y;
+      
+      ctx.fillStyle = "#121212";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      stars.forEach(star => {
+        let starX = star.x + offsetX;
+        let starY = star.y + offsetY;
+        if (starX >= 0 && starX <= canvas.width && starY >= 0 && starY <= canvas.height) {
+          ctx.beginPath();
+          ctx.fillStyle = "white";
+          ctx.arc(starX, starY, star.radius, 0, 2 * Math.PI);
+          ctx.fill();
+        }
+      });
+      
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(255,255,255,0.05)";
+      for (let x = 0; x <= WORLD_WIDTH; x += GRID_SIZE) {
+        ctx.beginPath();
+        ctx.moveTo(x + offsetX, offsetY);
+        ctx.lineTo(x + offsetX, WORLD_HEIGHT + offsetY);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= WORLD_HEIGHT; y += GRID_SIZE) {
+        ctx.beginPath();
+        ctx.moveTo(offsetX, y + offsetY);
+        ctx.lineTo(WORLD_WIDTH + offsetX, y + offsetY);
+        ctx.stroke();
+      }
+      ctx.lineWidth = 8;
+      ctx.strokeStyle = "#fff";
+      ctx.strokeRect(offsetX, offsetY, WORLD_WIDTH, WORLD_HEIGHT);
+      
+      foods.forEach(food => {
+        let foodX = food.x + offsetX;
+        let foodY = food.y + offsetY;
+        if (foodX + food.radius < 0 || foodX - food.radius > canvas.width ||
+            foodY + food.radius < 0 || foodY - food.radius > canvas.height) {
+          return;
+        }
+        ctx.beginPath();
+        ctx.fillStyle = food.color;
+        ctx.arc(foodX, foodY, food.radius, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.fillStyle = "#000";
+        ctx.font = "bold 14px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`${food.num}/${food.denom}`, foodX, foodY);
+      });
+      
+      playerCells.forEach(cell => {
+        ctx.beginPath();
+        ctx.fillStyle = "#2979ff";
+        ctx.arc(cell.x + offsetX, cell.y + offsetY, cell.radius, 0, 2 * Math.PI);
+        ctx.fill();
+      });
+    }
+    
+    function gameLoop() {
+      if (gameOver) return;
+      
+      if (Date.now() - lastOpTime > 40000) {
+        generateOperation();
+        spawnFoods();
+        lastOpTime = Date.now();
+      }
+      
+      updatePlayer();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+    
+    function checkCollisionsWithFoods(eater) {
+      for (let i = foods.length - 1; i >= 0; i--) {
+        const food = foods[i];
+        const dx = food.x - eater.x;
+        const dy = food.y - eater.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < eater.radius + food.radius) {
+          const { num: a, denom: b } = food;
+          const { num: A, denom: B } = currentOperation;
+          if (a * B === b * A) {
+            eater.radius += 5;
+            if (playerCells.includes(eater)) {
+              score += 10;
+              document.getElementById('score-display').textContent = `Puntuación: ${score}`;
+            }
+            generateOperation();
+            spawnFoods();
+            lastOpTime = Date.now();
+            return;
+          } else {
+            if (eater.radius <= MIN_RADIUS) {
+              endGame();
+              return;
+            } else {
+              eater.radius = Math.max(MIN_RADIUS, eater.radius - 5);
+              if (playerCells.includes(eater)) {
+                score = Math.max(0, score - 5);
+                document.getElementById('score-display').textContent = `Puntuación: ${score}`;
+              }
+            }
+          }
+          foods.splice(i, 1);
+        }
+      }
+    }
+    
+    function endGame() {
+      gameOver = true;
+      document.getElementById('game-over').style.display = 'block';
+      document.getElementById('final-score').textContent = `Puntuación: ${score}`;
+    }
+    
+    canvas.addEventListener('mousemove', e => {
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+    });
+    
+    canvas.addEventListener('touchmove', e => {
+      mouseX = e.touches[0].clientX;
+      mouseY = e.touches[0].clientY;
+      e.preventDefault();
+    }, { passive: false });
+    
+    window.addEventListener('resize', () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    });
+    
+    function initGame() {
+      gameOver = false;
+      score = 0;
+      document.getElementById('score-display').textContent = `Puntuación: ${score}`;
+      initPlayer();
+      generateOperation();
+      spawnFoods();
+      spawnStars();
+      lastOpTime = Date.now();
+      document.getElementById('game-over').style.display = 'none';
+      document.getElementById('welcome-screen').style.display = 'none';
+      gameLoop();
+    }
+    
+    document.getElementById('start-btn').addEventListener('click', initGame);
+    document.getElementById('restart-btn').addEventListener('click', initGame);
+  </script>
+</body>
+</html>
