@@ -44,8 +44,7 @@
       z-index: 10;
       font-size: 1.6em;
       color: #fff;
-      /* Para evitar que KaTeX se vea algo borroso, forzamos transform: none; */
-      transform: none;
+      transform: none; /* Evita sub-píxeles borrosos */
     }
     #score-display {
       position: absolute;
@@ -105,7 +104,6 @@
     #welcome-screen h1 {
       font-size: 2.2em;
       margin-bottom: 20px;
-      /* Aseguramos que no haya transform que provoque borrosidad */
       transform: none;
     }
     #speed-container {
@@ -444,13 +442,15 @@
           ctx.fillStyle = food.color;
           ctx.arc(foodX, foodY, food.radius, 0, 2 * Math.PI);
           ctx.fill();
-          // Texto de la fracción (en negro, centrado)
-          ctx.fillStyle = "#000";
-          // Para evitar sub-píxeles, redondeamos a enteros
+
+          // Texto de la fracción (en blanco, centrado, con coordenadas enteras)
+          ctx.fillStyle = "#fff";
           ctx.font = "bold 14px Arial";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.fillText(`${food.num}/${food.denom}`, Math.round(foodX), Math.round(foodY));
+          const tx = Math.round(foodX);
+          const ty = Math.round(foodY);
+          ctx.fillText(`${food.num}/${food.denom}`, tx, ty);
         }
       });
 
@@ -533,7 +533,7 @@
 
     // Inicializa o reinicia el juego
     function initGame() {
-      // 1) Leemos valor del slider (1–10) y adaptamos baseAccel (0.1–1.0)
+      // 1) Leemos el valor del slider (1–10) y adaptamos baseAccel (0.1–1.0)
       const sliderValue = parseFloat(speedSlider.value);
       baseAccel = sliderValue * 0.1;
 
