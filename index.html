@@ -10,9 +10,7 @@
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
   
   <style>
-    /* -------------------------------------------------------------
-       Reset mínimo y cuerpo
-    ------------------------------------------------------------- */
+    /*---------------- Reset y cuerpo ----------------*/
     * {
       margin: 0;
       padding: 0;
@@ -21,25 +19,21 @@
     body {
       background: #121212;
       font-family: Arial, sans-serif;
-      /* NO ocultamos el cursor en todo el body: solo lo haremos sobre el canvas cuando inicie el juego */
+      /* El cursor no se oculta globalmente: solo sobre el canvas en “in-game”. */
     }
 
-    /* -------------------------------------------------------------
-       Canvas y cursor “in-game”
-    ------------------------------------------------------------- */
+    /*---------------- Canvas y control de cursor ----------------*/
     #gameCanvas {
       position: absolute;
       top: 0;
       left: 0;
-      /* El canvas empezará oculto el cursor solo cuando se inicie el juego */
+      /* Cuando esté en el juego, se le aplicará la clase .hide-cursor para ocultarlo. */
     }
     .hide-cursor {
       cursor: none;
     }
 
-    /* -------------------------------------------------------------
-       Operación y puntuación
-    ------------------------------------------------------------- */
+    /*---------------- Texto de operación y puntuación (in-game) ----------------*/
     #operation-display {
       position: absolute;
       top: 20px;
@@ -50,6 +44,8 @@
       z-index: 10;
       font-size: 1.6em;
       color: #fff;
+      /* Para evitar que KaTeX se vea algo borroso, forzamos transform: none; */
+      transform: none;
     }
     #score-display {
       position: absolute;
@@ -63,9 +59,7 @@
       color: #fff;
     }
 
-    /* -------------------------------------------------------------
-       Pantalla "Game Over" (oculta por defecto)
-    ------------------------------------------------------------- */
+    /*---------------- Pantalla de “Game Over” ----------------*/
     #game-over {
       position: absolute;
       top: 50%;
@@ -92,9 +86,7 @@
       cursor: pointer;
     }
 
-    /* -------------------------------------------------------------
-       Pantalla de bienvenida (ocupa TODO el viewport)
-    ------------------------------------------------------------- */
+    /*---------------- Pantalla de bienvenida (ocupa todo) ----------------*/
     #welcome-screen {
       position: absolute;
       top: 0;
@@ -108,21 +100,13 @@
       align-items: center;
       justify-content: center;
       z-index: 1000;
-      cursor: default; /* cursor visible mientras esté en la bienvenida */
+      cursor: default; /* cursor visible aquí */
     }
     #welcome-screen h1 {
       font-size: 2.2em;
       margin-bottom: 20px;
-    }
-    #welcome-screen button {
-      font-size: 0.9em;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 5px;
-      background: #2979ff;
-      color: #fff;
-      cursor: pointer;
-      margin-top: 20px;
+      /* Aseguramos que no haya transform que provoque borrosidad */
+      transform: none;
     }
     #speed-container {
       font-size: 1em;
@@ -140,13 +124,22 @@
       margin-top: 5px;
       font-size: 1.2em;
     }
+    #welcome-screen button {
+      font-size: 0.9em;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      background: #2979ff;
+      color: #fff;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
   <!-- Canvas del juego -->
   <canvas id="gameCanvas"></canvas>
   
-  <!-- Pantalla de bienvenida (ocupa TODO) -->
+  <!-- Pantalla de bienvenida (ocupa TODO el viewport) -->
   <div id="welcome-screen">
     <h1>Bienvenido a Math Agar.io</h1>
     <div id="speed-container">
@@ -181,24 +174,15 @@
     const scoreDisplay = document.getElementById('score-display');
     const gameOverScreen = document.getElementById('game-over');
     const finalScoreText = document.getElementById('final-score');
-    
-    // Ajuste inicial del canvas
-    function resizeCanvas() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    }
-    window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
-    
-    // Constantes del "mundo"
+
+    // Variables de estado
     const WORLD_WIDTH = 4000;
     const WORLD_HEIGHT = 4000;
     const GRID_SIZE = 100;
     const FOOD_COUNT = 40;
     const STAR_COUNT = 200;
     const MIN_RADIUS = 10;
-    
-    // Estado del juego
+
     let playerCells = [];
     let foods = [];
     let stars = [];
@@ -206,9 +190,25 @@
     let score = 0;
     let mouseX = 0, mouseY = 0;
     let gameOver = false;
-    let baseAccel = 0.5;    // Se reasignará cuando inicie el juego
-    let lastOpTime = Date.now();
-    
+    let baseAccel = 0.5; // Se ajustará al iniciar el juego
+
+    // Ajusta el tamaño del canvas teniendo en cuenta el devicePixelRatio
+    function resizeCanvas() {
+      const DPR = window.devicePixelRatio || 1;
+      // Asignamos tamaño en píxeles físicos
+      canvas.width = window.innerWidth * DPR;
+      canvas.height = window.innerHeight * DPR;
+      // Ajustamos el CSS para que el canvas ocupe toda la ventana en píxeles lógicos
+      canvas.style.width = window.innerWidth + 'px';
+      canvas.style.height = window.innerHeight + 'px';
+      // Reiniciamos la transform para evitar acumulación de escalados
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      // Escalamos para mapear 1 unidad de dibujo a 1 píxel lógico
+      ctx.scale(DPR, DPR);
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
     // Helper: número entero aleatorio entre min y max (inclusive)
     function getRandomInt(min, max) {
       return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -232,7 +232,7 @@
       } while (g !== 1);
       return { num, denom };
     }
-    
+
     // Inicializa la célula del jugador en el centro del mundo
     function initPlayer() {
       playerCells = [{
@@ -245,23 +245,22 @@
         isEjected: false
       }];
     }
-    
+
     // Genera una operación fraccionaria objetivo y la muestra con KaTeX
     function generateOperation() {
       const frac = generateRandomIrreducibleFraction();
       currentOperation = { num: frac.num, denom: frac.denom };
       const displayText = `\\displaystyle \\frac{${frac.num}}{${frac.denom}} = \\;?`;
       katex.render(displayText, operationDisplay);
-      lastOpTime = Date.now();
     }
-    
+
     // Crea la lista de “foods”: 30% correctas y 70% incorrectas
     function spawnFoods() {
       foods = [];
       const targetNum = currentOperation.num;
       const targetDen = currentOperation.denom;
-      
-      // 30% de FOOD_COUNT → fracciones correctamente equivalentes
+
+      // 30% de FOOD_COUNT → fracciones equivalentes correctas
       const numCorrect = Math.floor(FOOD_COUNT * 0.3);
       let correctFractions = [];
       let attempts = 0;
@@ -291,7 +290,7 @@
           isCorrect: true
         });
       });
-      
+
       // El resto: fracciones “incorrectas”
       const incorrectCount = FOOD_COUNT - numCorrect;
       for (let i = 0; i < incorrectCount; i++) {
@@ -302,7 +301,7 @@
           if (a * targetDen !== b * targetNum) valid = true;
           tries++;
         }
-        if (!valid) {  // fallback rápido
+        if (!valid) { // fallback rápido si no se encuentra en 200 intentos
           b = targetDen + getRandomInt(1, 5);
           a = targetNum + getRandomInt(1, 5);
         }
@@ -319,7 +318,7 @@
         });
       }
     }
-    
+
     // Crea un fondo de “estrellas”
     function spawnStars() {
       stars = [];
@@ -331,16 +330,20 @@
         });
       }
     }
-    
+
     // Actualiza movimiento de la célula del jugador
     function updatePlayer() {
       if (gameOver) return;
-      
-      // Calculamos vector de control según el mouse
-      let controlX = mouseX - canvas.width / 2;
-      let controlY = mouseY - canvas.height / 2;
-      let controlDist = Math.sqrt(controlX * controlX + controlY * controlY);
-      
+
+      // Coordenadas CSS del canvas
+      const cw = canvas.clientWidth;
+      const ch = canvas.clientHeight;
+
+      // Calculamos vector de control según el mouse (en píxeles lógicos)
+      let controlX = mouseX - cw / 2;
+      let controlY = mouseY - ch / 2;
+      let controlDist = Math.hypot(controlX, controlY);
+
       playerCells.forEach(cell => {
         if (controlDist > 0) {
           cell.vx += (controlX / controlDist) * baseAccel;
@@ -365,102 +368,111 @@
         if (cell.x > WORLD_WIDTH - cell.radius) cell.x = WORLD_WIDTH - cell.radius;
         if (cell.y < cell.radius) cell.y = cell.radius;
         if (cell.y > WORLD_HEIGHT - cell.radius) cell.y = WORLD_HEIGHT - cell.radius;
-        
+
         checkCollisionsWithFoods(cell);
       });
     }
-    
-    // Dibuja todo en el canvas
+
+    // Dibuja todo en el canvas (usando coordenadas CSS)
     function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      let offsetX = canvas.width / 2 - playerCells[0].x;
-      let offsetY = canvas.height / 2 - playerCells[0].y;
-      
-      // fondo oscuro
+      const cw = canvas.clientWidth;
+      const ch = canvas.clientHeight;
+
+      // Limpiamos el área completa (en coordenadas CSS)
+      ctx.clearRect(0, 0, cw, ch);
+
+      // Calculamos offsets para centrar la cámara sobre la célula del jugador
+      const offsetX = cw / 2 - playerCells[0].x;
+      const offsetY = ch / 2 - playerCells[0].y;
+
+      // Pintamos fondo oscuro
       ctx.fillStyle = "#121212";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      // dibujar estrellas
+      ctx.fillRect(0, 0, cw, ch);
+
+      // Dibujamos estrellas
+      ctx.fillStyle = "white";
       stars.forEach(star => {
-        let starX = star.x + offsetX;
-        let starY = star.y + offsetY;
-        if (starX >= 0 && starX <= canvas.width && starY >= 0 && starY <= canvas.height) {
+        const starX = star.x + offsetX;
+        const starY = star.y + offsetY;
+        if (
+          starX >= 0 &&
+          starX <= cw &&
+          starY >= 0 &&
+          starY <= ch
+        ) {
           ctx.beginPath();
-          ctx.fillStyle = "white";
           ctx.arc(starX, starY, star.radius, 0, 2 * Math.PI);
           ctx.fill();
         }
       });
-      
-      // dibujar grid tenue
+
+      // Dibujamos grid tenue
       ctx.lineWidth = 1;
       ctx.strokeStyle = "rgba(255,255,255,0.05)";
       for (let x = 0; x <= WORLD_WIDTH; x += GRID_SIZE) {
+        const px = x + offsetX;
         ctx.beginPath();
-        ctx.moveTo(x + offsetX, offsetY);
-        ctx.lineTo(x + offsetX, WORLD_HEIGHT + offsetY);
+        ctx.moveTo(px, offsetY);
+        ctx.lineTo(px, WORLD_HEIGHT + offsetY);
         ctx.stroke();
       }
       for (let y = 0; y <= WORLD_HEIGHT; y += GRID_SIZE) {
+        const py = y + offsetY;
         ctx.beginPath();
-        ctx.moveTo(offsetX, y + offsetY);
-        ctx.lineTo(WORLD_WIDTH + offsetX, y + offsetY);
+        ctx.moveTo(offsetX, py);
+        ctx.lineTo(WORLD_WIDTH + offsetX, py);
         ctx.stroke();
       }
-      
-      // contorno del “mundo”
+
+      // Contorno del “mundo”
       ctx.lineWidth = 8;
       ctx.strokeStyle = "#fff";
       ctx.strokeRect(offsetX, offsetY, WORLD_WIDTH, WORLD_HEIGHT);
-      
-      // dibujar “foods”
+
+      // Dibujamos “foods”
       foods.forEach(food => {
-        let foodX = food.x + offsetX;
-        let foodY = food.y + offsetY;
-        // si está dentro de la pantalla
+        const foodX = food.x + offsetX;
+        const foodY = food.y + offsetY;
         if (
           foodX + food.radius >= 0 &&
-          foodX - food.radius <= canvas.width &&
+          foodX - food.radius <= cw &&
           foodY + food.radius >= 0 &&
-          foodY - food.radius <= canvas.height
+          foodY - food.radius <= ch
         ) {
+          // Círculo para la fracción
           ctx.beginPath();
           ctx.fillStyle = food.color;
           ctx.arc(foodX, foodY, food.radius, 0, 2 * Math.PI);
           ctx.fill();
+          // Texto de la fracción (en negro, centrado)
           ctx.fillStyle = "#000";
+          // Para evitar sub-píxeles, redondeamos a enteros
           ctx.font = "bold 14px Arial";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.fillText(`${food.num}/${food.denom}`, foodX, foodY);
+          ctx.fillText(`${food.num}/${food.denom}`, Math.round(foodX), Math.round(foodY));
         }
       });
-      
-      // dibujar célula del jugador
+
+      // Dibujamos célula del jugador
       playerCells.forEach(cell => {
+        const px = cell.x + offsetX;
+        const py = cell.y + offsetY;
         ctx.beginPath();
         ctx.fillStyle = "#2979ff";
-        ctx.arc(cell.x + offsetX, cell.y + offsetY, cell.radius, 0, 2 * Math.PI);
+        ctx.arc(px, py, cell.radius, 0, 2 * Math.PI);
         ctx.fill();
       });
     }
-    
+
     // Loop principal del juego
     function gameLoop() {
       if (gameOver) return;
-      
-      // Cada 40s regenerar operación y “foods” si no se han consumido
-      if (Date.now() - lastOpTime > 40000) {
-        generateOperation();
-        spawnFoods();
-        lastOpTime = Date.now();
-      }
-      
       updatePlayer();
       draw();
       requestAnimationFrame(gameLoop);
     }
-    
+
     // Detecta colisiones entre célula “eater” y las “foods”
     function checkCollisionsWithFoods(eater) {
       for (let i = foods.length - 1; i >= 0; i--) {
@@ -472,18 +484,17 @@
           const { num: a, denom: b } = food;
           const { num: A, denom: B } = currentOperation;
           if (a * B === b * A) {
-            // fracción correcta: agrandar célula y sumar puntos
+            // Correcta: agrandar célula y sumar puntos
             eater.radius += 5;
             if (playerCells.includes(eater)) {
               score += 10;
               scoreDisplay.textContent = `Puntuación: ${score}`;
             }
+            // Generamos nueva operación y “foods”
             generateOperation();
             spawnFoods();
-            lastOpTime = Date.now();
-            return;
           } else {
-            // fracción incorrecta: reducir célula o game over
+            // Incorrecta: reducir célula o terminar
             if (eater.radius <= MIN_RADIUS) {
               endGame();
               return;
@@ -499,17 +510,17 @@
         }
       }
     }
-    
+
     // Finaliza el juego y muestra “Game Over”
     function endGame() {
       gameOver = true;
       gameOverScreen.style.display = 'block';
       finalScoreText.textContent = `Puntuación: ${score}`;
-      // Quitamos la clase que oculta el cursor sobre el canvas, para que vuelva a ser visible
+      // Volvemos a mostrar el cursor sobre el canvas
       canvas.classList.remove('hide-cursor');
     }
-    
-    // Actualiza posición del mouse (para control del jugador)
+
+    // Manejadores de entrada para mover al jugador
     canvas.addEventListener('mousemove', e => {
       mouseX = e.clientX;
       mouseY = e.clientY;
@@ -519,13 +530,13 @@
       mouseY = e.touches[0].clientY;
       e.preventDefault();
     }, { passive: false });
-    
-    // Inicializa/reinicia el juego
+
+    // Inicializa o reinicia el juego
     function initGame() {
-      // 1) Leemos el valor del slider (1–10) y adaptamos baseAccel
+      // 1) Leemos valor del slider (1–10) y adaptamos baseAccel (0.1–1.0)
       const sliderValue = parseFloat(speedSlider.value);
-      baseAccel = sliderValue * 0.1; // rango de 0.1 a 1.0
-      
+      baseAccel = sliderValue * 0.1;
+
       // 2) Reiniciamos estado
       gameOver = false;
       score = 0;
@@ -534,20 +545,23 @@
       generateOperation();
       spawnFoods();
       spawnStars();
-      lastOpTime = Date.now();
-      gameOverScreen.style.display = 'none';
-      // 3) Ocultamos pantalla de bienvenida y comenzamos animación
+
+      // 3) Ocultamos pantalla de bienvenida
       welcomeScreen.style.display = 'none';
-      // 4) Añadimos clase para ocultar cursor SOLO SOBRE EL CANVAS
+      gameOverScreen.style.display = 'none';
+
+      // 4) Ocultamos cursor SOLO sobre el canvas
       canvas.classList.add('hide-cursor');
+
+      // 5) Iniciamos el bucle
       gameLoop();
     }
-    
-    // Cuando el slider cambie, actualizamos el texto mostrado
+
+    // Actualiza número visible junto al slider
     speedSlider.addEventListener('input', e => {
       speedValue.textContent = e.target.value;
     });
-    
+
     // Botones
     startBtn.addEventListener('click', initGame);
     restartBtn.addEventListener('click', initGame);
