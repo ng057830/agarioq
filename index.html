@@ -10,14 +10,36 @@
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
   
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    /* -------------------------------------------------------------
+       Reset mínimo y cuerpo
+    ------------------------------------------------------------- */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
     body {
-      overflow: hidden;
       background: #121212;
       font-family: Arial, sans-serif;
+      /* NO ocultamos el cursor en todo el body: solo lo haremos sobre el canvas cuando inicie el juego */
+    }
+
+    /* -------------------------------------------------------------
+       Canvas y cursor “in-game”
+    ------------------------------------------------------------- */
+    #gameCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      /* El canvas empezará oculto el cursor solo cuando se inicie el juego */
+    }
+    .hide-cursor {
       cursor: none;
     }
-    #gameCanvas { position: absolute; top: 0; left: 0; }
+
+    /* -------------------------------------------------------------
+       Operación y puntuación
+    ------------------------------------------------------------- */
     #operation-display {
       position: absolute;
       top: 20px;
@@ -40,7 +62,10 @@
       font-size: 1.2em;
       color: #fff;
     }
-    /* Pantalla de Game Over (oculta por defecto) */
+
+    /* -------------------------------------------------------------
+       Pantalla "Game Over" (oculta por defecto)
+    ------------------------------------------------------------- */
     #game-over {
       position: absolute;
       top: 50%;
@@ -54,25 +79,11 @@
       z-index: 999;
       font-size: 2em;
       display: none;
+      cursor: default; /* cursor visible en los botones */
     }
-    /* Pantalla de bienvenida (visible al inicio) */
-    #welcome-screen {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: rgba(0,0,0,0.9);
-      color: #fff;
-      padding: 30px;
-      border-radius: 15px;
-      text-align: center;
-      z-index: 999;
-      font-size: 2em;
-      display: block;
-    }
-    #welcome-screen button, #game-over button {
+    #game-over button {
       margin-top: 20px;
-      font-size: 0.8em;
+      font-size: 0.9em;
       padding: 10px 20px;
       border: none;
       border-radius: 5px;
@@ -80,38 +91,114 @@
       color: #fff;
       cursor: pointer;
     }
+
+    /* -------------------------------------------------------------
+       Pantalla de bienvenida (ocupa TODO el viewport)
+    ------------------------------------------------------------- */
+    #welcome-screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0,0,0,0.9);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      cursor: default; /* cursor visible mientras esté en la bienvenida */
+    }
+    #welcome-screen h1 {
+      font-size: 2.2em;
+      margin-bottom: 20px;
+    }
+    #welcome-screen button {
+      font-size: 0.9em;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      background: #2979ff;
+      color: #fff;
+      cursor: pointer;
+      margin-top: 20px;
+    }
+    #speed-container {
+      font-size: 1em;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    #speed-container label {
+      display: block;
+      margin-bottom: 5px;
+    }
+    #speed-slider {
+      width: 200px;
+    }
+    #speed-value {
+      margin-top: 5px;
+      font-size: 1.2em;
+    }
   </style>
 </head>
 <body>
+  <!-- Canvas del juego -->
   <canvas id="gameCanvas"></canvas>
   
+  <!-- Pantalla de bienvenida (ocupa TODO) -->
   <div id="welcome-screen">
-    <div>Bienvenido a Math Agar.io</div>
+    <h1>Bienvenido a Math Agar.io</h1>
+    <div id="speed-container">
+      <label for="speed-slider">Velocidad del jugador:</label>
+      <input type="range" id="speed-slider" min="1" max="10" value="5">
+      <div id="speed-value">5</div>
+    </div>
     <button id="start-btn">Iniciar juego</button>
   </div>
   
+  <!-- Operación y puntuación (in-game) -->
   <div id="operation-display"></div>
   <div id="score-display">Puntuación: 0</div>
   
+  <!-- Pantalla de Game Over -->
   <div id="game-over">
     <div>¡Game Over!</div>
-    <div id="final-score"></div>
+    <div id="final-score" style="margin-top: 15px;"></div>
     <button id="restart-btn">Nueva partida</button>
   </div>
   
   <script>
+    // Referencias a elementos HTML
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    const welcomeScreen = document.getElementById('welcome-screen');
+    const startBtn = document.getElementById('start-btn');
+    const restartBtn = document.getElementById('restart-btn');
+    const speedSlider = document.getElementById('speed-slider');
+    const speedValue = document.getElementById('speed-value');
+    const operationDisplay = document.getElementById('operation-display');
+    const scoreDisplay = document.getElementById('score-display');
+    const gameOverScreen = document.getElementById('game-over');
+    const finalScoreText = document.getElementById('final-score');
     
+    // Ajuste inicial del canvas
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+    
+    // Constantes del "mundo"
     const WORLD_WIDTH = 4000;
     const WORLD_HEIGHT = 4000;
     const GRID_SIZE = 100;
-    
     const FOOD_COUNT = 40;
     const STAR_COUNT = 200;
+    const MIN_RADIUS = 10;
     
+    // Estado del juego
     let playerCells = [];
     let foods = [];
     let stars = [];
@@ -119,13 +206,14 @@
     let score = 0;
     let mouseX = 0, mouseY = 0;
     let gameOver = false;
-    const baseAccel = 0.5;
+    let baseAccel = 0.5;    // Se reasignará cuando inicie el juego
     let lastOpTime = Date.now();
-    const MIN_RADIUS = 10;
     
+    // Helper: número entero aleatorio entre min y max (inclusive)
     function getRandomInt(min, max) {
       return Math.floor(Math.random() * (max - min + 1)) + min;
     }
+    // Helper: máximo común divisor
     function gcd(a, b) {
       a = Math.abs(a);
       b = Math.abs(b);
@@ -134,6 +222,7 @@
       }
       return a;
     }
+    // Genera una fracción irreducible aleatoria (numerador y denominador entre 1 y 10)
     function generateRandomIrreducibleFraction() {
       let num, denom, g;
       do {
@@ -144,6 +233,7 @@
       return { num, denom };
     }
     
+    // Inicializa la célula del jugador en el centro del mundo
     function initPlayer() {
       playerCells = [{
         x: WORLD_WIDTH / 2,
@@ -156,21 +246,23 @@
       }];
     }
     
+    // Genera una operación fraccionaria objetivo y la muestra con KaTeX
     function generateOperation() {
       const frac = generateRandomIrreducibleFraction();
       currentOperation = { num: frac.num, denom: frac.denom };
       const displayText = `\\displaystyle \\frac{${frac.num}}{${frac.denom}} = \\;?`;
-      katex.render(displayText, document.getElementById('operation-display'));
+      katex.render(displayText, operationDisplay);
       lastOpTime = Date.now();
     }
     
+    // Crea la lista de “foods”: 30% correctas y 70% incorrectas
     function spawnFoods() {
       foods = [];
       const targetNum = currentOperation.num;
       const targetDen = currentOperation.denom;
       
-      // 30% de 40 = 12 fracciones correctas
-      const numCorrect = Math.floor(FOOD_COUNT * 0.3); // 12
+      // 30% de FOOD_COUNT → fracciones correctamente equivalentes
+      const numCorrect = Math.floor(FOOD_COUNT * 0.3);
       let correctFractions = [];
       let attempts = 0;
       while (correctFractions.length < numCorrect && attempts < 200) {
@@ -186,8 +278,7 @@
         const k = getRandomInt(2, 6);
         correctFractions.push({ num: targetNum * k, denom: targetDen * k });
       }
-      for (let i = 0; i < correctFractions.length; i++) {
-        const frac = correctFractions[i];
+      correctFractions.forEach(frac => {
         foods.push({
           x: Math.random() * WORLD_WIDTH,
           y: Math.random() * WORLD_HEIGHT,
@@ -199,22 +290,19 @@
           color: '#ffab40',
           isCorrect: true
         });
-      }
+      });
       
-      const incorrectCount = FOOD_COUNT - numCorrect; // 28
+      // El resto: fracciones “incorrectas”
+      const incorrectCount = FOOD_COUNT - numCorrect;
       for (let i = 0; i < incorrectCount; i++) {
-        let a, b;
-        let valid = false;
-        let tries = 0;
+        let a, b, valid = false, tries = 0;
         while (!valid && tries < 200) {
           b = getRandomInt(2, 12);
           a = getRandomInt(1, b - 1);
-          if (a * targetDen !== b * targetNum) {
-            valid = true;
-          }
+          if (a * targetDen !== b * targetNum) valid = true;
           tries++;
         }
-        if (!valid) {
+        if (!valid) {  // fallback rápido
           b = targetDen + getRandomInt(1, 5);
           a = targetNum + getRandomInt(1, 5);
         }
@@ -232,6 +320,7 @@
       }
     }
     
+    // Crea un fondo de “estrellas”
     function spawnStars() {
       stars = [];
       for (let i = 0; i < STAR_COUNT; i++) {
@@ -243,44 +332,55 @@
       }
     }
     
+    // Actualiza movimiento de la célula del jugador
     function updatePlayer() {
       if (gameOver) return;
       
+      // Calculamos vector de control según el mouse
       let controlX = mouseX - canvas.width / 2;
       let controlY = mouseY - canvas.height / 2;
       let controlDist = Math.sqrt(controlX * controlX + controlY * controlY);
-      for (let cell of playerCells) {
+      
+      playerCells.forEach(cell => {
         if (controlDist > 0) {
           cell.vx += (controlX / controlDist) * baseAccel;
           cell.vy += (controlY / controlDist) * baseAccel;
         }
+        // fricción
         cell.vx *= 0.92;
         cell.vy *= 0.92;
+        // límite de velocidad dinámico
         let dynamicMaxSpeed = 25 * (40 / cell.radius);
         if (dynamicMaxSpeed < 8) dynamicMaxSpeed = 8;
-        let speed = Math.sqrt(cell.vx * cell.vx + cell.vy * cell.vy);
+        let speed = Math.hypot(cell.vx, cell.vy);
         if (speed > dynamicMaxSpeed) {
           cell.vx = (cell.vx / speed) * dynamicMaxSpeed;
           cell.vy = (cell.vy / speed) * dynamicMaxSpeed;
         }
+        // movemos la célula
         cell.x += cell.vx;
         cell.y += cell.vy;
+        // límites del “mundo”
         if (cell.x < cell.radius) cell.x = cell.radius;
         if (cell.x > WORLD_WIDTH - cell.radius) cell.x = WORLD_WIDTH - cell.radius;
         if (cell.y < cell.radius) cell.y = cell.radius;
         if (cell.y > WORLD_HEIGHT - cell.radius) cell.y = WORLD_HEIGHT - cell.radius;
+        
         checkCollisionsWithFoods(cell);
-      }
+      });
     }
     
+    // Dibuja todo en el canvas
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       let offsetX = canvas.width / 2 - playerCells[0].x;
       let offsetY = canvas.height / 2 - playerCells[0].y;
       
+      // fondo oscuro
       ctx.fillStyle = "#121212";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
+      // dibujar estrellas
       stars.forEach(star => {
         let starX = star.x + offsetX;
         let starY = star.y + offsetY;
@@ -292,6 +392,7 @@
         }
       });
       
+      // dibujar grid tenue
       ctx.lineWidth = 1;
       ctx.strokeStyle = "rgba(255,255,255,0.05)";
       for (let x = 0; x <= WORLD_WIDTH; x += GRID_SIZE) {
@@ -306,28 +407,36 @@
         ctx.lineTo(WORLD_WIDTH + offsetX, y + offsetY);
         ctx.stroke();
       }
+      
+      // contorno del “mundo”
       ctx.lineWidth = 8;
       ctx.strokeStyle = "#fff";
       ctx.strokeRect(offsetX, offsetY, WORLD_WIDTH, WORLD_HEIGHT);
       
+      // dibujar “foods”
       foods.forEach(food => {
         let foodX = food.x + offsetX;
         let foodY = food.y + offsetY;
-        if (foodX + food.radius < 0 || foodX - food.radius > canvas.width ||
-            foodY + food.radius < 0 || foodY - food.radius > canvas.height) {
-          return;
+        // si está dentro de la pantalla
+        if (
+          foodX + food.radius >= 0 &&
+          foodX - food.radius <= canvas.width &&
+          foodY + food.radius >= 0 &&
+          foodY - food.radius <= canvas.height
+        ) {
+          ctx.beginPath();
+          ctx.fillStyle = food.color;
+          ctx.arc(foodX, foodY, food.radius, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.fillStyle = "#000";
+          ctx.font = "bold 14px Arial";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(`${food.num}/${food.denom}`, foodX, foodY);
         }
-        ctx.beginPath();
-        ctx.fillStyle = food.color;
-        ctx.arc(foodX, foodY, food.radius, 0, 2 * Math.PI);
-        ctx.fill();
-        ctx.fillStyle = "#000";
-        ctx.font = "bold 14px Arial";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(`${food.num}/${food.denom}`, foodX, foodY);
       });
       
+      // dibujar célula del jugador
       playerCells.forEach(cell => {
         ctx.beginPath();
         ctx.fillStyle = "#2979ff";
@@ -336,9 +445,11 @@
       });
     }
     
+    // Loop principal del juego
     function gameLoop() {
       if (gameOver) return;
       
+      // Cada 40s regenerar operación y “foods” si no se han consumido
       if (Date.now() - lastOpTime > 40000) {
         generateOperation();
         spawnFoods();
@@ -350,26 +461,29 @@
       requestAnimationFrame(gameLoop);
     }
     
+    // Detecta colisiones entre célula “eater” y las “foods”
     function checkCollisionsWithFoods(eater) {
       for (let i = foods.length - 1; i >= 0; i--) {
         const food = foods[i];
         const dx = food.x - eater.x;
         const dy = food.y - eater.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        const dist = Math.hypot(dx, dy);
         if (dist < eater.radius + food.radius) {
           const { num: a, denom: b } = food;
           const { num: A, denom: B } = currentOperation;
           if (a * B === b * A) {
+            // fracción correcta: agrandar célula y sumar puntos
             eater.radius += 5;
             if (playerCells.includes(eater)) {
               score += 10;
-              document.getElementById('score-display').textContent = `Puntuación: ${score}`;
+              scoreDisplay.textContent = `Puntuación: ${score}`;
             }
             generateOperation();
             spawnFoods();
             lastOpTime = Date.now();
             return;
           } else {
+            // fracción incorrecta: reducir célula o game over
             if (eater.radius <= MIN_RADIUS) {
               endGame();
               return;
@@ -377,7 +491,7 @@
               eater.radius = Math.max(MIN_RADIUS, eater.radius - 5);
               if (playerCells.includes(eater)) {
                 score = Math.max(0, score - 5);
-                document.getElementById('score-display').textContent = `Puntuación: ${score}`;
+                scoreDisplay.textContent = `Puntuación: ${score}`;
               }
             }
           }
@@ -386,44 +500,57 @@
       }
     }
     
+    // Finaliza el juego y muestra “Game Over”
     function endGame() {
       gameOver = true;
-      document.getElementById('game-over').style.display = 'block';
-      document.getElementById('final-score').textContent = `Puntuación: ${score}`;
+      gameOverScreen.style.display = 'block';
+      finalScoreText.textContent = `Puntuación: ${score}`;
+      // Quitamos la clase que oculta el cursor sobre el canvas, para que vuelva a ser visible
+      canvas.classList.remove('hide-cursor');
     }
     
+    // Actualiza posición del mouse (para control del jugador)
     canvas.addEventListener('mousemove', e => {
       mouseX = e.clientX;
       mouseY = e.clientY;
     });
-    
     canvas.addEventListener('touchmove', e => {
       mouseX = e.touches[0].clientX;
       mouseY = e.touches[0].clientY;
       e.preventDefault();
     }, { passive: false });
     
-    window.addEventListener('resize', () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    });
-    
+    // Inicializa/reinicia el juego
     function initGame() {
+      // 1) Leemos el valor del slider (1–10) y adaptamos baseAccel
+      const sliderValue = parseFloat(speedSlider.value);
+      baseAccel = sliderValue * 0.1; // rango de 0.1 a 1.0
+      
+      // 2) Reiniciamos estado
       gameOver = false;
       score = 0;
-      document.getElementById('score-display').textContent = `Puntuación: ${score}`;
+      scoreDisplay.textContent = `Puntuación: ${score}`;
       initPlayer();
       generateOperation();
       spawnFoods();
       spawnStars();
       lastOpTime = Date.now();
-      document.getElementById('game-over').style.display = 'none';
-      document.getElementById('welcome-screen').style.display = 'none';
+      gameOverScreen.style.display = 'none';
+      // 3) Ocultamos pantalla de bienvenida y comenzamos animación
+      welcomeScreen.style.display = 'none';
+      // 4) Añadimos clase para ocultar cursor SOLO SOBRE EL CANVAS
+      canvas.classList.add('hide-cursor');
       gameLoop();
     }
     
-    document.getElementById('start-btn').addEventListener('click', initGame);
-    document.getElementById('restart-btn').addEventListener('click', initGame);
+    // Cuando el slider cambie, actualizamos el texto mostrado
+    speedSlider.addEventListener('input', e => {
+      speedValue.textContent = e.target.value;
+    });
+    
+    // Botones
+    startBtn.addEventListener('click', initGame);
+    restartBtn.addEventListener('click', initGame);
   </script>
 </body>
 </html>
