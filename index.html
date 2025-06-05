@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Math Agar.io - Fracciones Equivalentes (Modo Dark)</title>
-  
+  <title>Math Agar.io - Fracciones Equivalentes (Paleta Suave)</title>
+
   <!-- KaTeX para representar la fracción objetivo -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
-  
+
   <style>
     /*---------------- Reset y cuerpo ----------------*/
     * {
@@ -17,9 +17,8 @@
       box-sizing: border-box;
     }
     body {
-      background: #121212;
+      background: #202020; /* Gris muy oscuro, menos contrastante que el negro puro */
       font-family: Arial, sans-serif;
-      /* El cursor no se oculta globalmente: solo sobre el canvas en “in-game”. */
     }
 
     /*---------------- Canvas y control de cursor ----------------*/
@@ -27,7 +26,7 @@
       position: absolute;
       top: 0;
       left: 0;
-      /* Cuando esté en el juego, se le aplicará la clase .hide-cursor para ocultarlo. */
+      /* La clase .hide-cursor se añade solo durante el juego */
     }
     .hide-cursor {
       cursor: none;
@@ -38,24 +37,24 @@
       position: absolute;
       top: 20px;
       left: 20px;
-      background: rgba(0,0,0,0.7);
+      background: rgba(51, 51, 51, 0.8); /* Caja semitransparente oscura */
       padding: 10px;
-      border-radius: 10px;
+      border-radius: 8px;
       z-index: 10;
-      font-size: 1.6em;
-      color: #fff;
+      font-size: 1.5em;
+      color: #ffffff;
       transform: none; /* Evita sub-píxeles borrosos */
     }
     #score-display {
       position: absolute;
       top: 20px;
       right: 20px;
-      background: rgba(0,0,0,0.7);
+      background: rgba(51, 51, 51, 0.8);
       padding: 10px;
-      border-radius: 10px;
+      border-radius: 8px;
       z-index: 10;
-      font-size: 1.2em;
-      color: #fff;
+      font-size: 1.1em;
+      color: #ffffff;
     }
 
     /*---------------- Pantalla de “Game Over” ----------------*/
@@ -64,15 +63,15 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      background: rgba(0,0,0,0.9);
-      color: #fff;
+      background: rgba(32, 32, 32, 0.95);
+      color: #ffffff;
       padding: 30px;
-      border-radius: 15px;
+      border-radius: 12px;
       text-align: center;
       z-index: 999;
       font-size: 2em;
       display: none;
-      cursor: default; /* cursor visible en los botones */
+      cursor: default;
     }
     #game-over button {
       margin-top: 20px;
@@ -80,8 +79,8 @@
       padding: 10px 20px;
       border: none;
       border-radius: 5px;
-      background: #2979ff;
-      color: #fff;
+      background: #42a5f5; /* Azul pastel */
+      color: #ffffff;
       cursor: pointer;
     }
 
@@ -92,17 +91,17 @@
       left: 0;
       width: 100vw;
       height: 100vh;
-      background: rgba(0,0,0,0.9);
-      color: #fff;
+      background: rgba(32, 32, 32, 0.95);
+      color: #ffffff;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       z-index: 1000;
-      cursor: default; /* cursor visible aquí */
+      cursor: default;
     }
     #welcome-screen h1 {
-      font-size: 2.2em;
+      font-size: 2.4em;
       margin-bottom: 20px;
       transform: none;
     }
@@ -113,30 +112,32 @@
     }
     #speed-container label {
       display: block;
-      margin-bottom: 5px;
+      margin-bottom: 8px;
+      font-size: 1.1em;
     }
     #speed-slider {
-      width: 200px;
+      width: 220px;
     }
     #speed-value {
       margin-top: 5px;
-      font-size: 1.2em;
+      font-size: 1.3em;
     }
     #welcome-screen button {
-      font-size: 0.9em;
-      padding: 10px 20px;
+      font-size: 1em;
+      padding: 10px 25px;
       border: none;
       border-radius: 5px;
-      background: #2979ff;
-      color: #fff;
+      background: #42a5f5; /* Azul pastel */
+      color: #ffffff;
       cursor: pointer;
+      margin-top: 15px;
     }
   </style>
 </head>
 <body>
   <!-- Canvas del juego -->
   <canvas id="gameCanvas"></canvas>
-  
+
   <!-- Pantalla de bienvenida (ocupa TODO el viewport) -->
   <div id="welcome-screen">
     <h1>Bienvenido a Math Agar.io</h1>
@@ -147,18 +148,18 @@
     </div>
     <button id="start-btn">Iniciar juego</button>
   </div>
-  
+
   <!-- Operación y puntuación (in-game) -->
   <div id="operation-display"></div>
   <div id="score-display">Puntuación: 0</div>
-  
+
   <!-- Pantalla de Game Over -->
   <div id="game-over">
     <div>¡Game Over!</div>
     <div id="final-score" style="margin-top: 15px;"></div>
     <button id="restart-btn">Nueva partida</button>
   </div>
-  
+
   <script>
     // Referencias a elementos HTML
     const canvas = document.getElementById('gameCanvas');
@@ -193,13 +194,13 @@
     // Ajusta el tamaño del canvas teniendo en cuenta el devicePixelRatio
     function resizeCanvas() {
       const DPR = window.devicePixelRatio || 1;
-      // Asignamos tamaño en píxeles físicos
+      // Establecemos ancho/alto en píxeles físicos
       canvas.width = window.innerWidth * DPR;
       canvas.height = window.innerHeight * DPR;
-      // Ajustamos el CSS para que el canvas ocupe toda la ventana en píxeles lógicos
+      // Ajustamos el CSS para que ocupe toda la ventana en píxeles lógicos
       canvas.style.width = window.innerWidth + 'px';
       canvas.style.height = window.innerHeight + 'px';
-      // Reiniciamos la transform para evitar acumulación de escalados
+      // Reiniciamos la transform del contexto
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       // Escalamos para mapear 1 unidad de dibujo a 1 píxel lógico
       ctx.scale(DPR, DPR);
@@ -207,11 +208,11 @@
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
 
-    // Helper: número entero aleatorio entre min y max (inclusive)
+    // Función helper: número entero aleatorio entre min y max (inclusive)
     function getRandomInt(min, max) {
       return Math.floor(Math.random() * (max - min + 1)) + min;
     }
-    // Helper: máximo común divisor
+    // Función helper: máximo común divisor
     function gcd(a, b) {
       a = Math.abs(a);
       b = Math.abs(b);
@@ -239,8 +240,6 @@
         radius: 40,
         vx: 0,
         vy: 0,
-        mergeCooldown: 0,
-        isEjected: false
       }];
     }
 
@@ -252,7 +251,7 @@
       katex.render(displayText, operationDisplay);
     }
 
-    // Crea la lista de “foods”: 30% correctas y 70% incorrectas
+    // Crea la lista de “foods”: todas con el mismo color
     function spawnFoods() {
       foods = [];
       const targetNum = currentOperation.num;
@@ -284,7 +283,7 @@
           denom: frac.denom,
           vx: (Math.random() - 0.5) * 2,
           vy: (Math.random() - 0.5) * 2,
-          color: '#ffab40',
+          color: '#4fc3f7', // Un solo color azul claro para todas las opciones
           isCorrect: true
         });
       });
@@ -311,7 +310,7 @@
           denom: b,
           vx: (Math.random() - 0.5) * 2,
           vy: (Math.random() - 0.5) * 2,
-          color: '#ffab40',
+          color: '#4fc3f7', // El mismo color azul claro
           isCorrect: false
         });
       }
@@ -383,12 +382,12 @@
       const offsetX = cw / 2 - playerCells[0].x;
       const offsetY = ch / 2 - playerCells[0].y;
 
-      // Pintamos fondo oscuro
-      ctx.fillStyle = "#121212";
+      // Pintamos fondo gris oscuro uniforme
+      ctx.fillStyle = "#202020";
       ctx.fillRect(0, 0, cw, ch);
 
-      // Dibujamos estrellas
-      ctx.fillStyle = "white";
+      // Dibujamos estrellas (gris medio)
+      ctx.fillStyle = "#555555";
       stars.forEach(star => {
         const starX = star.x + offsetX;
         const starY = star.y + offsetY;
@@ -404,9 +403,9 @@
         }
       });
 
-      // Dibujamos grid tenue
+      // Dibujamos grid tenue (gris oscuro semitransparente)
       ctx.lineWidth = 1;
-      ctx.strokeStyle = "rgba(255,255,255,0.05)";
+      ctx.strokeStyle = "rgba(80, 80, 80, 0.5)";
       for (let x = 0; x <= WORLD_WIDTH; x += GRID_SIZE) {
         const px = x + offsetX;
         ctx.beginPath();
@@ -422,12 +421,12 @@
         ctx.stroke();
       }
 
-      // Contorno del “mundo”
+      // Contorno del “mundo” (gris medio)
       ctx.lineWidth = 8;
-      ctx.strokeStyle = "#fff";
+      ctx.strokeStyle = "#555555";
       ctx.strokeRect(offsetX, offsetY, WORLD_WIDTH, WORLD_HEIGHT);
 
-      // Dibujamos “foods”
+      // Dibujamos “foods” (todas con mismo color azul claro y texto en blanco)
       foods.forEach(food => {
         const foodX = food.x + offsetX;
         const foodY = food.y + offsetY;
@@ -439,12 +438,12 @@
         ) {
           // Círculo para la fracción
           ctx.beginPath();
-          ctx.fillStyle = food.color;
+          ctx.fillStyle = food.color; /* #4fc3f7 */
           ctx.arc(foodX, foodY, food.radius, 0, 2 * Math.PI);
           ctx.fill();
 
-          // Texto de la fracción (en blanco, centrado, con coordenadas enteras)
-          ctx.fillStyle = "#fff";
+          // Texto de la fracción (blanco, centrado, coordenadas enteras)
+          ctx.fillStyle = "#ffffff";
           ctx.font = "bold 14px Arial";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
@@ -454,12 +453,12 @@
         }
       });
 
-      // Dibujamos célula del jugador
+      // Dibujamos célula del jugador (color pastel naranja)
       playerCells.forEach(cell => {
         const px = cell.x + offsetX;
         const py = cell.y + offsetY;
         ctx.beginPath();
-        ctx.fillStyle = "#2979ff";
+        ctx.fillStyle = "#ffb74d"; /* Naranja pastel */
         ctx.arc(px, py, cell.radius, 0, 2 * Math.PI);
         ctx.fill();
       });
@@ -533,7 +532,7 @@
 
     // Inicializa o reinicia el juego
     function initGame() {
-      // 1) Leemos el valor del slider (1–10) y adaptamos baseAccel (0.1–1.0)
+      // 1) Leemos valor del slider (1–10) y adaptamos baseAccel (0.1–1.0)
       const sliderValue = parseFloat(speedSlider.value);
       baseAccel = sliderValue * 0.1;
 
